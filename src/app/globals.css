@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f9f4e8;
+  --ink: #1f2a44;
+  --accent: #ef6a2f;
+  --teal: #0f8b8d;
+  --sun: #ffd166;
+  --card: #fffaf0;
+  --stroke: #d0c7b0;
+}
+
+@theme inline {
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-body);
+}
+
+body {
+  background:
+    radial-gradient(circle at 10% 20%, #ffe8bd 0, transparent 40%),
+    radial-gradient(circle at 90% 10%, #b7ece4 0, transparent 35%),
+    radial-gradient(circle at 20% 85%, #ffc5a5 0, transparent 45%),
+    var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading), serif;
+}
+
+.glass-card {
+  background: color-mix(in oklab, var(--card) 92%, white 8%);
+  border: 1px solid var(--stroke);
+  border-radius: 1rem;
+  box-shadow: 0 12px 40px rgb(31 42 68 / 12%);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0.75rem;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  opacity: 0.95;
+}
+
+.btn-secondary {
+  background: var(--teal);
+  color: #fff;
+  border-radius: 0.75rem;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+}
+
+.field {
+  width: 100%;
+  border: 1px solid var(--stroke);
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.8rem;
+  background: #fffdf7;
+}
+
+.field:focus {
+  outline: 2px solid color-mix(in oklab, var(--accent) 45%, white 55%);
+  outline-offset: 1px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--stroke);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.fade-in {
+  animation: fadeIn 500ms ease both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
