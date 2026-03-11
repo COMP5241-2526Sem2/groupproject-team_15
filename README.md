@@ -40,6 +40,9 @@ Fill in:
 
 - NEXT_PUBLIC_SUPABASE_URL
 - NEXT_PUBLIC_SUPABASE_ANON_KEY
+- GITHUB_TOKEN
+- GITHUB_MODEL_ENDPOINT (optional, defaults to https://models.inference.ai.azure.com)
+- GITHUB_MODEL_NAME (optional, defaults to gpt-4o-mini)
 
 3. In Supabase SQL editor, run the schema:
 
@@ -63,6 +66,6 @@ Open http://localhost:3000
 
 ## Notes
 
-- The current AI scaffolding logic is deterministic and local (no external LLM call yet).
+- AI scaffolding uses GitHub Models API when `GITHUB_TOKEN` is configured, and falls back to deterministic local prompts if API access is unavailable.
 - OCR, LMS integration, and SSO are architecture-ready extensions to add next.
 - Original classroom launcher content is preserved in README.classroom.md.

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createAssessment, createMaterial, signOut } from "@/app/actions";
+import { createMaterial, signOut } from "@/app/actions";
+import AssessmentForm from "@/app/teacher/assessment-form";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function TeacherPage() {
@@ -33,15 +34,11 @@ export default async function TeacherPage() {
 
   const { data: assessments } = await supabase
     .from("assessments")
-    .select("id, title, prompt, rubric, created_at")
+    .select("id, title, prompt, answer, reference_material_id, created_at")
     .eq("teacher_id", user.id)
     .order("created_at", { ascending: false });
 
-  const { data: interactions } = await supabase
-    .from("interactions")
-    .select("prompt_type, content, created_at")
-    .order("created_at", { ascending: false })
-    .limit(12);
+  const materialTitleById = new Map((materials ?? []).map((material) => [material.id, material.title]));
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-8 sm:px-10">
@@ -76,9 +73,10 @@ export default async function TeacherPage() {
               placeholder="Short description"
             />
             <input
-              name="fileUrl"
+              name="file"
+              type="file"
+              accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.png,.jpg,.jpeg"
               className="field"
-              placeholder="https://... (PDF, PPT, image URL)"
             />
             <button className="btn-primary" type="submit">
               Save Material
@@ -90,9 +88,13 @@ export default async function TeacherPage() {
               <li key={material.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <p className="font-semibold">{material.title}</p>
                 <p>{material.description || "No description"}</p>
-                <a className="underline" href={material.file_url || "#"}>
-                  {material.file_url ? "Open file" : "No file linked"}
-                </a>
+                {material.file_url ? (
+                  <Link className="underline" href={`/materials/${material.id}`}>
+                    Open and view file
+                  </Link>
+                ) : (
+                  <span>No file linked</span>
+                )}
               </li>
             ))}
             {!materials?.length ? <li>No materials yet.</li> : null}
@@ -101,51 +103,27 @@ export default async function TeacherPage() {
 
         <article className="glass-card p-6">
           <h2 className="text-2xl font-semibold">Create Adaptive Assessment</h2>
-          <form action={createAssessment} className="mt-4 space-y-3">
-            <input name="title" className="field" placeholder="Assessment title" required />
-            <textarea
-              name="prompt"
-              className="field min-h-24"
-              placeholder="Core question or task"
-              required
-            />
-            <textarea
-              name="rubric"
-              className="field min-h-24"
-              placeholder="Rubric for partial-credit grading"
-            />
-            <button className="btn-primary" type="submit">
-              Publish Assessment
-            </button>
-          </form>
+          <AssessmentForm
+            materials={(materials ?? []).map((material) => ({
+              id: material.id,
+              title: material.title,
+            }))}
+          />
 
           <ul className="mt-5 space-y-2 text-sm">
             {(assessments ?? []).map((assessment) => (
               <li key={assessment.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <p className="font-semibold">{assessment.title}</p>
                 <p>{assessment.prompt}</p>
-                <p className="text-xs opacity-75">Rubric: {assessment.rubric || "Not set"}</p>
+                <p className="text-xs opacity-75">Answer: {assessment.answer || "Not set"}</p>
+                <p className="text-xs opacity-75">
+                  Reference material: {assessment.reference_material_id ? materialTitleById.get(assessment.reference_material_id) || "Not found" : "Not set"}
+                </p>
               </li>
             ))}
             {!assessments?.length ? <li>No assessments yet.</li> : null}
           </ul>
         </article>
-      </section>
-
-      <section className="glass-card p-6">
-        <h2 className="text-2xl font-semibold">Recent Student-AI Interactions</h2>
-        <p className="mt-2 text-sm">
-          Use these logs for process-based grading and identifying common misconceptions.
-        </p>
-        <ul className="mt-4 grid gap-2 md:grid-cols-2">
-          {(interactions ?? []).map((interaction, idx) => (
-            <li key={`${interaction.created_at}-${idx}`} className="rounded-lg border border-[var(--stroke)] p-3 text-sm">
-              <span className="chip">{interaction.prompt_type}</span>
-              <p className="mt-2">{interaction.content}</p>
-            </li>
-          ))}
-          {!interactions?.length ? <li>No interaction logs yet.</li> : null}
-        </ul>
       </section>
     </main>
   );

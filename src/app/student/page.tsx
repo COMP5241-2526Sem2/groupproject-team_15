@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { signOut, submitThinking } from "@/app/actions";
+import { signOut } from "@/app/actions";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function StudentPage() {
@@ -32,14 +32,28 @@ export default async function StudentPage() {
 
   const { data: assessments } = await supabase
     .from("assessments")
-    .select("id, title, prompt, rubric")
+    .select("id, title, prompt")
     .order("created_at", { ascending: false });
 
   const { data: submissions } = await supabase
     .from("submissions")
-    .select("id, attempt_no, thinking_process, ai_feedback, partial_score, created_at")
+    .select("id, assessment_id, created_at")
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
+
+  const latestSubmissionByAssessment = new Map<string, { id: string; assessment_id: string; created_at: string }>();
+  for (const submission of submissions ?? []) {
+    if (!latestSubmissionByAssessment.has(submission.assessment_id)) {
+      latestSubmissionByAssessment.set(submission.assessment_id, submission);
+    }
+  }
+
+  const submittedAssessments = Array.from(latestSubmissionByAssessment.values());
+  const submittedAssessmentIds = new Set(submittedAssessments.map((submission) => submission.assessment_id));
+  const assessmentsById = new Map((assessments ?? []).map((assessment) => [assessment.id, assessment]));
+  const availableAssessments = (assessments ?? []).filter(
+    (assessment) => !submittedAssessmentIds.has(assessment.id),
+  );
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-8 sm:px-10">
@@ -71,9 +85,13 @@ export default async function StudentPage() {
               <li key={material.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <p className="font-semibold">{material.title}</p>
                 <p>{material.description || "No description"}</p>
-                <a className="underline" href={material.file_url || "#"}>
-                  {material.file_url ? "Open material" : "No file linked"}
-                </a>
+                {material.file_url ? (
+                  <Link className="underline" href={`/materials/${material.id}`}>
+                    Open in material viewer
+                  </Link>
+                ) : (
+                  <span>No file linked</span>
+                )}
               </li>
             ))}
             {!materials?.length ? <li>No materials available yet.</li> : null}
@@ -81,58 +99,43 @@ export default async function StudentPage() {
         </article>
 
         <article className="glass-card p-6">
-          <h2 className="text-2xl font-semibold">Submit Thinking Process</h2>
-          <p className="mt-2 text-sm">
-            Required before hints and partial solutions are shown.
-          </p>
-          <form action={submitThinking} className="mt-4 space-y-3">
-            <select name="assessmentId" className="field" required>
-              <option value="">Select an assessment</option>
-              {(assessments ?? []).map((assessment) => (
-                <option key={assessment.id} value={assessment.id}>
-                  {assessment.title}
-                </option>
-              ))}
-            </select>
-            <textarea
-              name="thinkingProcess"
-              className="field min-h-28"
-              placeholder="Write steps, assumptions, or upload summary from OCR output"
-              required
-            />
-            <button className="btn-primary" type="submit">
-              Get Socratic Feedback
-            </button>
-          </form>
-
+          <h2 className="text-2xl font-semibold">Available Assessments</h2>
+          <p className="mt-2 text-sm">Click an assessment to open the answer page.</p>
           <div className="mt-5 space-y-2 text-sm">
-            <h3 className="text-lg font-semibold">Available Assessments</h3>
-            {(assessments ?? []).map((assessment) => (
-              <article key={assessment.id} className="rounded-lg border border-[var(--stroke)] p-3">
+            {availableAssessments.map((assessment) => (
+              <Link
+                key={assessment.id}
+                href={`/student/assessments/${assessment.id}`}
+                className="block rounded-lg border border-[var(--stroke)] p-3 transition hover:opacity-90"
+              >
                 <p className="font-semibold">{assessment.title}</p>
                 <p>{assessment.prompt}</p>
-                <p className="text-xs opacity-75">Rubric: {assessment.rubric || "Not set"}</p>
-              </article>
+              </Link>
             ))}
-            {!assessments?.length ? <p>No assessments published yet.</p> : null}
+            {!availableAssessments.length ? <p>No available assessments right now.</p> : null}
           </div>
         </article>
-      </section>
 
-      <section className="glass-card p-6">
-        <h2 className="text-2xl font-semibold">My Attempt History</h2>
-        <ul className="mt-4 grid gap-2 md:grid-cols-2">
-          {(submissions ?? []).map((submission) => (
-            <li key={submission.id} className="rounded-lg border border-[var(--stroke)] p-3 text-sm">
-              <span className="chip">Attempt {submission.attempt_no}</span>
-              <p className="mt-2">{submission.thinking_process}</p>
-              <p className="mt-2 font-semibold">AI Prompt:</p>
-              <p>{submission.ai_feedback || "Pending"}</p>
-              <p className="mt-2">Partial score: {submission.partial_score ?? 0}</p>
-            </li>
-          ))}
-          {!submissions?.length ? <li>No attempts yet.</li> : null}
-        </ul>
+        <article className="glass-card p-6">
+          <h2 className="text-2xl font-semibold">Submitted Assignments</h2>
+          <p className="mt-2 text-sm">Assessments you have already submitted.</p>
+          <div className="mt-5 space-y-2 text-sm">
+            {submittedAssessments.map((submission) => {
+              const assessment = assessmentsById.get(submission.assessment_id);
+
+              return (
+                <div
+                  key={submission.id}
+                  className="rounded-lg border border-[var(--stroke)] p-3"
+                >
+                  <p className="font-semibold">{assessment?.title ?? "Assessment"}</p>
+                  <p>{assessment?.prompt ?? "Submitted successfully."}</p>
+                </div>
+              );
+            })}
+            {!submittedAssessments.length ? <p>No submitted assignments yet.</p> : null}
+          </div>
+        </article>
       </section>
     </main>
   );

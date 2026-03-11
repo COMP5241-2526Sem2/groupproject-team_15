@@ -52,7 +52,8 @@ export type Database = {
           teacher_id: string;
           title: string;
           prompt: string;
-          rubric: string | null;
+          answer: string | null;
+          reference_material_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -60,13 +61,15 @@ export type Database = {
           teacher_id: string;
           title: string;
           prompt: string;
-          rubric?: string | null;
+          answer?: string | null;
+          reference_material_id?: string | null;
           created_at?: string;
         };
         Update: {
           title?: string;
           prompt?: string;
-          rubric?: string | null;
+          answer?: string | null;
+          reference_material_id?: string | null;
         };
         Relationships: [];
       };
@@ -75,50 +78,22 @@ export type Database = {
           id: string;
           assessment_id: string;
           student_id: string;
-          thinking_process: string;
+          answer: string;
           attempt_no: number;
-          ai_feedback: string | null;
-          partial_score: number | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           assessment_id: string;
           student_id: string;
-          thinking_process: string;
+          answer: string;
           attempt_no?: number;
-          ai_feedback?: string | null;
-          partial_score?: number | null;
           created_at?: string;
         };
         Update: {
-          thinking_process?: string;
+          answer?: string;
           attempt_no?: number;
-          ai_feedback?: string | null;
-          partial_score?: number | null;
-        };
-        Relationships: [];
-      };
-      interactions: {
-        Row: {
-          id: string;
-          submission_id: string;
-          student_id: string;
-          prompt_type: string;
-          content: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          submission_id: string;
-          student_id: string;
-          prompt_type: string;
-          content: string;
           created_at?: string;
-        };
-        Update: {
-          prompt_type?: string;
-          content?: string;
         };
         Relationships: [];
       };

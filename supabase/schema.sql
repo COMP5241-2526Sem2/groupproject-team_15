@@ -25,31 +25,76 @@ create table if not exists public.assessments (
   teacher_id uuid not null references public.profiles(id) on delete cascade,
   title text not null,
   prompt text not null,
-  rubric text,
+  answer text,
+  reference_material_id uuid references public.materials(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
--- Student thinking submissions
+alter table public.assessments
+add column if not exists answer text;
+
+alter table public.assessments
+add column if not exists reference_material_id uuid references public.materials(id) on delete set null;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'assessments'
+      and column_name = 'rubric'
+  ) then
+    execute 'update public.assessments set answer = rubric where answer is null and rubric is not null';
+  end if;
+end;
+$$;
+
+-- Student submissions
 create table if not exists public.submissions (
   id uuid primary key default gen_random_uuid(),
   assessment_id uuid not null references public.assessments(id) on delete cascade,
   student_id uuid not null references public.profiles(id) on delete cascade,
-  thinking_process text not null,
+  answer text not null,
   attempt_no int not null default 1,
-  ai_feedback text,
-  partial_score numeric(4,2),
   created_at timestamptz not null default now()
 );
 
--- Detailed AI interaction records for teacher review
-create table if not exists public.interactions (
-  id uuid primary key default gen_random_uuid(),
-  submission_id uuid not null references public.submissions(id) on delete cascade,
-  student_id uuid not null references public.profiles(id) on delete cascade,
-  prompt_type text not null,
-  content text not null,
-  created_at timestamptz not null default now()
-);
+alter table public.submissions
+add column if not exists answer text;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'submissions'
+      and column_name = 'thinking_process'
+  ) then
+    execute 'update public.submissions set answer = coalesce(answer, thinking_process, '''') where answer is null';
+  else
+    update public.submissions
+    set answer = ''
+    where answer is null;
+  end if;
+end;
+$$;
+
+alter table public.submissions
+alter column answer set not null;
+
+alter table public.submissions
+drop column if exists thinking_process,
+drop column if exists ai_feedback,
+drop column if exists partial_score;
+
+drop table if exists public.interactions;
+
+-- Storage bucket for teacher-uploaded study materials
+insert into storage.buckets (id, name, public)
+values ('materials', 'materials', true)
+on conflict (id) do nothing;
 
 -- Create profile row after a new auth user signs up
 create or replace function public.handle_new_user()
@@ -83,7 +128,6 @@ alter table public.profiles enable row level security;
 alter table public.materials enable row level security;
 alter table public.assessments enable row level security;
 alter table public.submissions enable row level security;
-alter table public.interactions enable row level security;
 
 -- Profiles policies
 create policy "users can view own profile"
@@ -144,19 +188,55 @@ using (
   )
 );
 
--- Interactions policies
-create policy "students can read own interactions"
-on public.interactions for select
-using (auth.uid() = student_id);
-
-create policy "students can insert own interactions"
-on public.interactions for insert
-with check (auth.uid() = student_id);
-
-create policy "teachers can read interactions"
-on public.interactions for select
+-- Storage policies (materials bucket)
+drop policy if exists "authenticated can read materials files" on storage.objects;
+create policy "authenticated can read materials files"
+on storage.objects for select
 using (
-  exists (
+  bucket_id = 'materials'
+  and auth.role() = 'authenticated'
+);
+
+drop policy if exists "teachers can upload own material files" on storage.objects;
+create policy "teachers can upload own material files"
+on storage.objects for insert
+with check (
+  bucket_id = 'materials'
+  and auth.role() = 'authenticated'
+  and (storage.foldername(name))[1] = auth.uid()::text
+  and exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and p.role = 'teacher'
+  )
+);
+
+drop policy if exists "teachers can update own material files" on storage.objects;
+create policy "teachers can update own material files"
+on storage.objects for update
+using (
+  bucket_id = 'materials'
+  and (storage.foldername(name))[1] = auth.uid()::text
+  and exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and p.role = 'teacher'
+  )
+)
+with check (
+  bucket_id = 'materials'
+  and (storage.foldername(name))[1] = auth.uid()::text
+  and exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and p.role = 'teacher'
+  )
+);
+
+drop policy if exists "teachers can delete own material files" on storage.objects;
+create policy "teachers can delete own material files"
+on storage.objects for delete
+using (
+  bucket_id = 'materials'
+  and (storage.foldername(name))[1] = auth.uid()::text
+  and exists (
     select 1 from public.profiles p
     where p.id = auth.uid() and p.role = 'teacher'
   )
