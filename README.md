@@ -67,5 +67,7 @@ Open http://localhost:3000
 ## Notes
 
 - AI scaffolding uses GitHub Models API when `GITHUB_TOKEN` is configured, and falls back to deterministic local prompts if API access is unavailable.
+- The development script uses Webpack instead of Turbopack because Tailwind v4 oxide can fail to resolve inside Codespaces during `next dev` even when the package is installed correctly.
+- The project includes a postinstall self-heal for Tailwind oxide so fresh Linux Codespaces can recover automatically when npm skips the native package.
 - OCR, LMS integration, and SSO are architecture-ready extensions to add next.
 - Original classroom launcher content is preserved in README.classroom.md.
