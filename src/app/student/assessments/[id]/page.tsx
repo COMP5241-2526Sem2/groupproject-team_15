@@ -4,6 +4,20 @@ import { signOut, submitanswer } from "@/app/actions";
 import AssessmentAiHelper from "@/app/student/assessments/[id]/assessment-ai-helper";
 import { createClient } from "@/lib/supabase/server";
 
+function splitAssessmentQuestions(text: string) {
+  return text
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) =>
+      line
+        .replace(/^\s*(?:question|q)\s*\d+[\s).:-]*/i, "")
+        .replace(/^\s*[-*]\s*/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+}
+
 export default async function StudentAssessmentPage({
   params,
 }: {
@@ -72,7 +86,15 @@ export default async function StudentAssessmentPage({
 
       <section className="glass-card space-y-4 p-6">
         <h2 className="text-2xl font-semibold">Task</h2>
-        <p className="text-sm">{assessment.prompt}</p>
+        {splitAssessmentQuestions(assessment.prompt).length ? (
+          <ol className="list-decimal space-y-2 pl-5 text-sm">
+            {splitAssessmentQuestions(assessment.prompt).map((question, index) => (
+              <li key={`${assessment.id}-question-${index}`}>{question}</li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-sm">{assessment.prompt}</p>
+        )}
         {material ? (
           <p className="text-sm">
             Reference material:{" "}

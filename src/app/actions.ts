@@ -9,6 +9,24 @@ export type GenerateAssessmentState = {
   generatedTitle: string;
   generatedPrompt: string;
   generatedAnswer: string;
+  generatedQuestions: string[];
+  generatedAnswers: string[];
+  error?: string;
+};
+
+export type McQuestionItem = {
+  question: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  correctOption: "A" | "B" | "C" | "D";
+  explanation: string;
+};
+
+export type GenerateMcQuestionState = {
+  generatedTitle: string;
+  generatedItems: McQuestionItem[];
   error?: string;
 };
 
@@ -22,6 +40,13 @@ const initialGeneratedAssessmentState: GenerateAssessmentState = {
   generatedTitle: "",
   generatedPrompt: "",
   generatedAnswer: "",
+  generatedQuestions: [],
+  generatedAnswers: [],
+};
+
+const initialGeneratedMcQuestionState: GenerateMcQuestionState = {
+  generatedTitle: "",
+  generatedItems: [],
 };
 
 function sleep(ms: number) {
@@ -117,23 +142,144 @@ function parseGeneratedAssessment(text: string): {
   generatedTitle: string;
   generatedPrompt: string;
   generatedAnswer: string;
+  generatedQuestions: string[];
+  generatedAnswers: string[];
 } | null {
   try {
     const parsed = JSON.parse(text) as {
       title?: string;
       prompt?: string;
       answer?: string;
+      questions?: string[];
+      answers?: string[];
     };
 
-    const generatedTitle = parsed.title?.trim() || "";
-    const generatedPrompt = parsed.prompt?.trim() || "";
-    const generatedAnswer = parsed.answer?.trim() || "";
+    const normalizeItems = (items: string[] | undefined) =>
+      (items ?? [])
+        .map((item) =>
+          String(item)
+            .replace(/^\s*(?:question|answer|q|a)?\s*\d+[\s).:-]*/i, "")
+            .replace(/^\s*[-*]\s*/, "")
+            .trim(),
+        )
+        .filter(Boolean);
 
-    if (!generatedTitle || !generatedPrompt || !generatedAnswer) {
+    const splitStructuredLines = (value: string) =>
+      value
+        .split(/\r?\n+/)
+        .map((line) =>
+          line
+            .replace(/^\s*(?:question|answer|q|a)?\s*\d+[\s).:-]*/i, "")
+            .replace(/^\s*[-*]\s*/, "")
+            .trim(),
+        )
+        .filter(Boolean);
+
+    const generatedTitle = parsed.title?.trim() || "";
+    let generatedPrompt = parsed.prompt?.trim() || "";
+    let generatedAnswer = parsed.answer?.trim() || "";
+
+    let generatedQuestions = normalizeItems(parsed.questions);
+    let generatedAnswers = normalizeItems(parsed.answers);
+
+    if (generatedQuestions.length === 0 && generatedPrompt) {
+      generatedQuestions = splitStructuredLines(generatedPrompt);
+    }
+
+    if (generatedAnswers.length === 0 && generatedAnswer) {
+      generatedAnswers = splitStructuredLines(generatedAnswer);
+    }
+
+    if (!generatedPrompt && generatedQuestions.length > 0) {
+      generatedPrompt = generatedQuestions.map((question, index) => `Q${index + 1}. ${question}`).join("\n");
+    }
+
+    if (!generatedAnswer && generatedAnswers.length > 0) {
+      generatedAnswer = generatedAnswers.map((answer, index) => `A${index + 1}. ${answer}`).join("\n");
+    }
+
+    if (!generatedTitle || generatedQuestions.length === 0) {
       return null;
     }
 
-    return { generatedTitle, generatedPrompt, generatedAnswer };
+    return {
+      generatedTitle,
+      generatedPrompt,
+      generatedAnswer,
+      generatedQuestions,
+      generatedAnswers,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeMcOption(value: string | null | undefined): "A" | "B" | "C" | "D" | null {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "A" || normalized === "B" || normalized === "C" || normalized === "D") {
+    return normalized;
+  }
+
+  return null;
+}
+
+function parseGeneratedMcQuestions(text: string): {
+  generatedTitle: string;
+  generatedItems: McQuestionItem[];
+} | null {
+  try {
+    const parsed = JSON.parse(text) as {
+      title?: string;
+      questions?: Array<{
+        question?: string;
+        options?: string[];
+        optionA?: string;
+        optionB?: string;
+        optionC?: string;
+        optionD?: string;
+        correctOption?: string;
+        answer?: string;
+        explanation?: string;
+      }>;
+    };
+
+    const generatedTitle = parsed.title?.trim() || "";
+    const generatedItems = (parsed.questions ?? [])
+      .map((item) => {
+        const options = Array.isArray(item.options)
+          ? item.options.map((option) => String(option).trim()).filter(Boolean)
+          : [];
+
+        const optionA = (item.optionA?.trim() || options[0] || "").trim();
+        const optionB = (item.optionB?.trim() || options[1] || "").trim();
+        const optionC = (item.optionC?.trim() || options[2] || "").trim();
+        const optionD = (item.optionD?.trim() || options[3] || "").trim();
+        const correctOption = normalizeMcOption(item.correctOption ?? item.answer);
+
+        if (!item.question?.trim() || !optionA || !optionB || !optionC || !optionD || !correctOption) {
+          return null;
+        }
+
+        return {
+          question: item.question.trim(),
+          optionA,
+          optionB,
+          optionC,
+          optionD,
+          correctOption,
+          explanation: item.explanation?.trim() || "",
+        } satisfies McQuestionItem;
+      })
+      .filter((item): item is McQuestionItem => Boolean(item));
+
+    if (!generatedTitle || generatedItems.length === 0) {
+      return null;
+    }
+
+    return {
+      generatedTitle,
+      generatedItems,
+    };
   } catch {
     return null;
   }
@@ -283,6 +429,15 @@ export async function generateAssessmentByAi(
   formData: FormData,
 ): Promise<GenerateAssessmentState> {
   const referenceMaterialId = String(formData.get("referenceMaterialId") ?? "").trim();
+  const questionCountRaw = String(formData.get("questionCount") ?? "").trim();
+  const requestedQuestionCount = Number.parseInt(questionCountRaw, 10);
+
+  if (!questionCountRaw || !Number.isFinite(requestedQuestionCount) || requestedQuestionCount < 1) {
+    return {
+      ...initialGeneratedAssessmentState,
+      error: "Please enter how many questions to generate.",
+    };
+  }
 
   if (!referenceMaterialId) {
     return {
@@ -342,7 +497,7 @@ export async function generateAssessmentByAi(
     modelName,
     systemPrompt:
       "You are an education assistant. Generate concise, practical teacher-ready assessments from provided learning material.",
-    userPrompt: `${promptContext}\n\nGenerate one adaptive assessment related to the material. Return only valid minified JSON with this exact shape: {"title":"string","prompt":"string","answer":"string"}. The prompt must include 3 to 5 short related questions. The answer must provide model answers for each question in order.`,
+    userPrompt: `${promptContext}\n\nGenerate one adaptive assessment related to the material. Return only valid minified JSON with this exact shape: {"title":"string","questions":["string"],"answers":["string"]}. Include exactly ${requestedQuestionCount} short related questions in \"questions\". Include model answers in \"answers\" with the same order and exact same count as questions.`,
   });
 
   if (!aiResult.content) {
@@ -357,6 +512,108 @@ export async function generateAssessmentByAi(
     return {
       ...initialGeneratedAssessmentState,
       error: "AI response format was invalid. Please try again.",
+    };
+  }
+
+  return {
+    ...parsed,
+    error: undefined,
+  };
+}
+
+export async function generateMcQuestionsByAi(
+  _: GenerateMcQuestionState,
+  formData: FormData,
+): Promise<GenerateMcQuestionState> {
+  const referenceMaterialId = String(formData.get("referenceMaterialId") ?? "").trim();
+  const questionCountRaw = String(formData.get("questionCount") ?? "").trim();
+  const requestedQuestionCount = Number.parseInt(questionCountRaw, 10);
+
+  if (!questionCountRaw || !Number.isFinite(requestedQuestionCount) || requestedQuestionCount < 1) {
+    return {
+      ...initialGeneratedMcQuestionState,
+      error: "Please enter how many MC questions to generate.",
+    };
+  }
+
+  if (!referenceMaterialId) {
+    return {
+      ...initialGeneratedMcQuestionState,
+      error: "Please choose a reference material first.",
+    };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      ...initialGeneratedMcQuestionState,
+      error: "Please log in again.",
+    };
+  }
+
+  const { data: material } = await supabase
+    .from("materials")
+    .select("title, description, file_url")
+    .eq("id", referenceMaterialId)
+    .eq("teacher_id", user.id)
+    .maybeSingle();
+
+  if (!material) {
+    return {
+      ...initialGeneratedMcQuestionState,
+      error: "Selected material was not found.",
+    };
+  }
+
+  const githubToken = process.env.GITHUB_TOKEN;
+  const endpoint = process.env.GITHUB_MODEL_ENDPOINT || "https://models.inference.ai.azure.com";
+  const modelName = process.env.GITHUB_MODEL_NAME || "gpt-4o-mini";
+
+  if (!githubToken) {
+    return {
+      ...initialGeneratedMcQuestionState,
+      error: "Missing GITHUB_TOKEN in server environment.",
+    };
+  }
+
+  const materialText = material.file_url ? await readMaterialFileText(material.file_url) : null;
+
+  const promptContext = [
+    `Material title: ${material.title}`,
+    `Material description: ${material.description?.trim() || "No description provided."}`,
+    `Material excerpt: ${materialText || "No readable file text available."}`,
+  ].join("\n\n");
+
+  const aiResult = await requestAiText({
+    endpoint,
+    githubToken,
+    modelName,
+    systemPrompt:
+      "You are an education assistant. Generate clear multiple-choice questions grounded in provided learning material.",
+    userPrompt:
+      `${promptContext}\n\n` +
+      `Generate exactly ${requestedQuestionCount} multiple-choice questions related to the material. ` +
+      "Return only valid minified JSON with this exact shape: " +
+      '{"title":"string","questions":[{"question":"string","optionA":"string","optionB":"string","optionC":"string","optionD":"string","correctOption":"A|B|C|D","explanation":"string"}]}. ' +
+      "The questions array length must equal the requested count.",
+  });
+
+  if (!aiResult.content) {
+    return {
+      ...initialGeneratedMcQuestionState,
+      error: aiResult.reason || "AI could not generate MC questions.",
+    };
+  }
+
+  const parsed = parseGeneratedMcQuestions(aiResult.content);
+  if (!parsed || parsed.generatedItems.length !== requestedQuestionCount) {
+    return {
+      ...initialGeneratedMcQuestionState,
+      error: "AI response format or question count was invalid. Please try again.",
     };
   }
 
@@ -459,6 +716,210 @@ export async function createAssessment(formData: FormData) {
 
   revalidatePath("/teacher");
   revalidatePath("/student");
+  redirect("/teacher");
+}
+
+export async function createMcQuestions(formData: FormData) {
+  const title = String(formData.get("title") ?? "").trim();
+  const itemsJson = String(formData.get("itemsJson") ?? "").trim();
+  const referenceMaterialId = String(formData.get("referenceMaterialId") ?? "").trim();
+
+  if (!title || !itemsJson) return;
+
+  let parsedItems: unknown;
+  try {
+    parsedItems = JSON.parse(itemsJson);
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(parsedItems) || parsedItems.length === 0) return;
+
+  const normalizedItems = parsedItems
+    .map((item) => {
+      const row = item as Partial<McQuestionItem>;
+      const correctOption = normalizeMcOption(row.correctOption);
+
+      if (
+        !row.question?.trim() ||
+        !row.optionA?.trim() ||
+        !row.optionB?.trim() ||
+        !row.optionC?.trim() ||
+        !row.optionD?.trim() ||
+        !correctOption
+      ) {
+        return null;
+      }
+
+      return {
+        question: row.question.trim(),
+        optionA: row.optionA.trim(),
+        optionB: row.optionB.trim(),
+        optionC: row.optionC.trim(),
+        optionD: row.optionD.trim(),
+        correctOption,
+        explanation: row.explanation?.trim() || "",
+      };
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        question: string;
+        optionA: string;
+        optionB: string;
+        optionC: string;
+        optionD: string;
+        correctOption: "A" | "B" | "C" | "D";
+        explanation: string;
+      } => Boolean(item),
+    );
+
+  if (normalizedItems.length === 0) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  let validatedReferenceMaterialId: string | null = null;
+
+  if (referenceMaterialId) {
+    const { data: material } = await supabase
+      .from("materials")
+      .select("id")
+      .eq("id", referenceMaterialId)
+      .eq("teacher_id", user.id)
+      .maybeSingle();
+
+    if (material) {
+      validatedReferenceMaterialId = material.id;
+    }
+  }
+
+  const { data: createdSet, error: createSetError } = await supabase
+    .from("mc_sets")
+    .insert({
+      teacher_id: user.id,
+      title,
+      reference_material_id: validatedReferenceMaterialId,
+    })
+    .select("id")
+    .single();
+
+  if (createSetError || !createdSet) {
+    throw new Error(`MC set creation failed: ${createSetError?.message || "Unknown error"}`);
+  }
+
+  await supabase.from("mc_questions").insert(
+    normalizedItems.map((item) => ({
+      set_id: createdSet.id,
+      teacher_id: user.id,
+      title,
+      question: item.question,
+      option_a: item.optionA,
+      option_b: item.optionB,
+      option_c: item.optionC,
+      option_d: item.optionD,
+      correct_option: item.correctOption,
+      explanation: item.explanation || null,
+      reference_material_id: validatedReferenceMaterialId,
+    })),
+  );
+
+  revalidatePath("/teacher");
+  revalidatePath("/student");
+  redirect("/teacher");
+}
+
+export async function deleteMaterial(formData: FormData) {
+  const materialId = String(formData.get("materialId") ?? "").trim();
+
+  if (!materialId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  const { data: material } = await supabase
+    .from("materials")
+    .select("id, file_url")
+    .eq("id", materialId)
+    .eq("teacher_id", user.id)
+    .maybeSingle();
+
+  if (!material) return;
+
+  await supabase.from("materials").delete().eq("id", material.id).eq("teacher_id", user.id);
+
+  if (material.file_url) {
+    try {
+      const url = new URL(material.file_url);
+      const marker = "/storage/v1/object/public/materials/";
+      const markerIndex = url.pathname.indexOf(marker);
+
+      if (markerIndex !== -1) {
+        const objectPath = decodeURIComponent(url.pathname.slice(markerIndex + marker.length));
+        if (objectPath) {
+          await supabase.storage.from("materials").remove([objectPath]);
+        }
+      }
+    } catch {
+      // Ignore malformed URLs and continue.
+    }
+  }
+
+  revalidatePath("/teacher");
+  revalidatePath("/student");
+}
+
+export async function deleteAssessment(formData: FormData) {
+  const assessmentId = String(formData.get("assessmentId") ?? "").trim();
+
+  if (!assessmentId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  await supabase
+    .from("assessments")
+    .delete()
+    .eq("id", assessmentId)
+    .eq("teacher_id", user.id);
+
+  revalidatePath("/teacher");
+  revalidatePath("/student");
+}
+
+export async function deleteMcSet(formData: FormData) {
+  const mcSetId = String(formData.get("mcSetId") ?? "").trim();
+
+  if (!mcSetId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  await supabase
+    .from("mc_sets")
+    .delete()
+    .eq("id", mcSetId)
+    .eq("teacher_id", user.id);
+
+  revalidatePath("/teacher");
+  revalidatePath("/student");
 }
 
 export async function submitanswer(formData: FormData) {
@@ -479,6 +940,64 @@ export async function submitanswer(formData: FormData) {
     student_id: user.id,
     answer,
   });
+
+  revalidatePath("/student");
+  revalidatePath("/teacher");
+  redirect("/student");
+}
+
+export async function submitMcAnswers(formData: FormData) {
+  const setId = String(formData.get("setId") ?? "").trim();
+
+  if (!setId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  const { data: questions } = await supabase
+    .from("mc_questions")
+    .select("id, correct_option")
+    .eq("set_id", setId)
+    .order("created_at", { ascending: true });
+
+  if (!questions?.length) return;
+
+  const submissions = questions
+    .map((question) => {
+      const selected = String(formData.get(`answer_${question.id}`) ?? "").trim().toUpperCase();
+      if (selected !== "A" && selected !== "B" && selected !== "C" && selected !== "D") {
+        return null;
+      }
+
+      return {
+        set_id: setId,
+        question_id: question.id,
+        student_id: user.id,
+        selected_option: selected,
+        is_correct: selected === question.correct_option,
+      };
+    })
+    .filter(
+      (
+        row,
+      ): row is {
+        set_id: string;
+        question_id: string;
+        student_id: string;
+        selected_option: "A" | "B" | "C" | "D";
+        is_correct: boolean;
+      } => Boolean(row),
+    );
+
+  if (submissions.length !== questions.length) {
+    return;
+  }
+
+  await supabase.from("mc_submissions").insert(submissions);
 
   revalidatePath("/student");
   revalidatePath("/teacher");

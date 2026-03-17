@@ -3,6 +3,20 @@ import { redirect } from "next/navigation";
 import { signOut } from "@/app/actions";
 import { createClient } from "@/lib/supabase/server";
 
+function splitAssessmentQuestions(text: string | null | undefined) {
+  return (text ?? "")
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) =>
+      line
+        .replace(/^\s*(?:question|q)\s*\d+[\s).:-]*/i, "")
+        .replace(/^\s*[-*]\s*/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+}
+
 export default async function StudentPage() {
   const supabase = await createClient();
   const {
@@ -41,6 +55,17 @@ export default async function StudentPage() {
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
 
+  const { data: mcSets } = await supabase
+    .from("mc_sets")
+    .select("id, title, created_at")
+    .order("created_at", { ascending: false });
+
+  const { data: mcSubmissions } = await supabase
+    .from("mc_submissions")
+    .select("id, set_id, created_at, is_correct")
+    .eq("student_id", user.id)
+    .order("created_at", { ascending: false });
+
   const latestSubmissionByAssessment = new Map<string, { id: string; assessment_id: string; created_at: string }>();
   for (const submission of submissions ?? []) {
     if (!latestSubmissionByAssessment.has(submission.assessment_id)) {
@@ -54,6 +79,26 @@ export default async function StudentPage() {
   const availableAssessments = (assessments ?? []).filter(
     (assessment) => !submittedAssessmentIds.has(assessment.id),
   );
+
+  const latestMcSubmissionBySet = new Map<string, { id: string; set_id: string; created_at: string }>();
+  const mcSubmissionStatsBySet = new Map<string, { total: number; correct: number }>();
+
+  for (const submission of mcSubmissions ?? []) {
+    if (!latestMcSubmissionBySet.has(submission.set_id)) {
+      latestMcSubmissionBySet.set(submission.set_id, submission);
+    }
+
+    const currentStats = mcSubmissionStatsBySet.get(submission.set_id) ?? { total: 0, correct: 0 };
+    mcSubmissionStatsBySet.set(submission.set_id, {
+      total: currentStats.total + 1,
+      correct: currentStats.correct + (submission.is_correct ? 1 : 0),
+    });
+  }
+
+  const submittedMcSets = Array.from(latestMcSubmissionBySet.values());
+  const submittedMcSetIds = new Set(submittedMcSets.map((submission) => submission.set_id));
+  const mcSetsById = new Map((mcSets ?? []).map((setItem) => [setItem.id, setItem]));
+  const availableMcSets = (mcSets ?? []).filter((setItem) => !submittedMcSetIds.has(setItem.id));
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-8 sm:px-10">
@@ -109,7 +154,15 @@ export default async function StudentPage() {
                 className="block rounded-lg border border-[var(--stroke)] p-3 transition hover:opacity-90"
               >
                 <p className="font-semibold">{assessment.title}</p>
-                <p>{assessment.prompt}</p>
+                {splitAssessmentQuestions(assessment.prompt).length ? (
+                  <ol className="mt-1 list-decimal space-y-1 pl-5">
+                    {splitAssessmentQuestions(assessment.prompt).map((question, index) => (
+                      <li key={`${assessment.id}-available-question-${index}`}>{question}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p>{assessment.prompt}</p>
+                )}
               </Link>
             ))}
             {!availableAssessments.length ? <p>No available assessments right now.</p> : null}
@@ -129,11 +182,58 @@ export default async function StudentPage() {
                   className="rounded-lg border border-[var(--stroke)] p-3"
                 >
                   <p className="font-semibold">{assessment?.title ?? "Assessment"}</p>
-                  <p>{assessment?.prompt ?? "Submitted successfully."}</p>
+                  {splitAssessmentQuestions(assessment?.prompt).length ? (
+                    <ol className="mt-1 list-decimal space-y-1 pl-5">
+                      {splitAssessmentQuestions(assessment?.prompt).map((question, index) => (
+                        <li key={`${submission.id}-submitted-question-${index}`}>{question}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p>{assessment?.prompt ?? "Submitted successfully."}</p>
+                  )}
                 </div>
               );
             })}
             {!submittedAssessments.length ? <p>No submitted assignments yet.</p> : null}
+          </div>
+        </article>
+
+        <article className="glass-card p-6">
+          <h2 className="text-2xl font-semibold">Available MC Sets</h2>
+          <p className="mt-2 text-sm">Open a set, answer all MC questions, and submit.</p>
+          <div className="mt-5 space-y-2 text-sm">
+            {availableMcSets.map((setItem) => (
+              <Link
+                key={setItem.id}
+                href={`/student/mc/${setItem.id}`}
+                className="block rounded-lg border border-[var(--stroke)] p-3 transition hover:opacity-90"
+              >
+                <p className="font-semibold">{setItem.title}</p>
+              </Link>
+            ))}
+            {!availableMcSets.length ? <p>No available MC sets right now.</p> : null}
+          </div>
+        </article>
+
+        <article className="glass-card p-6">
+          <h2 className="text-2xl font-semibold">Submitted MC Sets</h2>
+          <p className="mt-2 text-sm">MC sets you have already completed.</p>
+          <div className="mt-5 space-y-2 text-sm">
+            {submittedMcSets.map((submission) => {
+              const setItem = mcSetsById.get(submission.set_id);
+              const stats = mcSubmissionStatsBySet.get(submission.set_id) ?? { total: 0, correct: 0 };
+              const percentage = stats.total ? Math.round((stats.correct / stats.total) * 100) : 0;
+
+              return (
+                <div key={submission.id} className="rounded-lg border border-[var(--stroke)] p-3">
+                  <p className="font-semibold">{setItem?.title ?? "MC Set"}</p>
+                  <p className="text-sm opacity-80">
+                    Result: {stats.correct}/{stats.total} ({percentage}%)
+                  </p>
+                </div>
+              );
+            })}
+            {!submittedMcSets.length ? <p>No submitted MC sets yet.</p> : null}
           </div>
         </article>
       </section>
