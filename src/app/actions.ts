@@ -428,9 +428,19 @@ export async function generateAssessmentByAi(
   _: GenerateAssessmentState,
   formData: FormData,
 ): Promise<GenerateAssessmentState> {
-  const referenceMaterialId = String(formData.get("referenceMaterialId") ?? "").trim();
+  const referenceMaterialIds = formData
+    .getAll("referenceMaterialIds")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
   const questionCountRaw = String(formData.get("questionCount") ?? "").trim();
   const requestedQuestionCount = Number.parseInt(questionCountRaw, 10);
+
+  const existingPrompt = String(formData.get("prompt") ?? "").trim();
+  const validExistingQuestionsCount = existingPrompt
+    .split(/\r?\n+/)
+    .filter((line) => line.trim().length > 0).length;
+
+  const existingAnswers = String(formData.get("answer") ?? "").trim();
 
   if (!questionCountRaw || !Number.isFinite(requestedQuestionCount) || requestedQuestionCount < 1) {
     return {
@@ -439,10 +449,23 @@ export async function generateAssessmentByAi(
     };
   }
 
-  if (!referenceMaterialId) {
+  const requiredCount = Math.max(0, requestedQuestionCount - validExistingQuestionsCount);
+
+  if (requiredCount === 0) {
+    return {
+      generatedTitle: String(formData.get("title") ?? "").trim(),
+      generatedPrompt: "",
+      generatedAnswer: "",
+      generatedQuestions: [],
+      generatedAnswers: [],
+      error: undefined,
+    };
+  }
+
+  if (referenceMaterialIds.length === 0) {
     return {
       ...initialGeneratedAssessmentState,
-      error: "Please choose a reference material first.",
+      error: "Please choose at least one reference material first.",
     };
   }
 
@@ -458,17 +481,17 @@ export async function generateAssessmentByAi(
     };
   }
 
-  const { data: material } = await supabase
+  const { data: materials } = await supabase
     .from("materials")
-    .select("title, description, file_url")
-    .eq("id", referenceMaterialId)
+    .select("id, title, description, file_url")
+    .in("id", referenceMaterialIds)
     .eq("teacher_id", user.id)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
-  if (!material) {
+  if (!materials || materials.length === 0) {
     return {
       ...initialGeneratedAssessmentState,
-      error: "Selected material was not found.",
+      error: "Selected reference materials were not found.",
     };
   }
 
@@ -483,13 +506,19 @@ export async function generateAssessmentByAi(
     };
   }
 
-  const materialText = material.file_url ? await readMaterialFileText(material.file_url) : null;
+  const promptChunks = await Promise.all(
+    materials.map(async (material, index) => {
+      const materialText = material.file_url ? await readMaterialFileText(material.file_url) : null;
 
-  const promptContext = [
-    `Material title: ${material.title}`,
-    `Material description: ${material.description?.trim() || "No description provided."}`,
-    `Material excerpt: ${materialText || "No readable file text available."}`,
-  ].join("\n\n");
+      return [
+        `Material ${index + 1} title: ${material.title}`,
+        `Material ${index + 1} description: ${material.description?.trim() || "No description provided."}`,
+        `Material ${index + 1} excerpt: ${materialText || "No readable file text available."}`,
+      ].join("\n");
+    }),
+  );
+
+  const promptContext = promptChunks.join("\n\n");
 
   const aiResult = await requestAiText({
     endpoint,
@@ -497,7 +526,7 @@ export async function generateAssessmentByAi(
     modelName,
     systemPrompt:
       "You are an education assistant. Generate concise, practical teacher-ready assessments from provided learning material.",
-    userPrompt: `${promptContext}\n\nGenerate one adaptive assessment related to the material. Return only valid minified JSON with this exact shape: {"title":"string","questions":["string"],"answers":["string"]}. Include exactly ${requestedQuestionCount} short related questions in \"questions\". Include model answers in \"answers\" with the same order and exact same count as questions.`,
+    userPrompt: `${promptContext}\n\nGenerate one adaptive assessment related to the material. Return only valid minified JSON with this exact shape: {"title":"string","questions":["string"],"answers":["string"]}. Include exactly ${requiredCount} short related questions in \"questions\". Include model answers in \"answers\" with the same order and exact same count as questions.`,
   });
 
   if (!aiResult.content) {
@@ -525,9 +554,23 @@ export async function generateMcQuestionsByAi(
   _: GenerateMcQuestionState,
   formData: FormData,
 ): Promise<GenerateMcQuestionState> {
-  const referenceMaterialId = String(formData.get("referenceMaterialId") ?? "").trim();
+  const referenceMaterialIds = formData
+    .getAll("referenceMaterialIds")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
   const questionCountRaw = String(formData.get("questionCount") ?? "").trim();
   const requestedQuestionCount = Number.parseInt(questionCountRaw, 10);
+  
+  const existingTitle = String(formData.get("title") ?? "").trim();
+  const itemsJson = String(formData.get("itemsJson") ?? "[]");
+  let existingItems: McQuestionItem[] = [];
+  try {
+    existingItems = JSON.parse(itemsJson);
+  } catch {}
+
+  const validExistingItems = existingItems.filter(
+    (item) => item.question.trim().length > 0 
+  );
 
   if (!questionCountRaw || !Number.isFinite(requestedQuestionCount) || requestedQuestionCount < 1) {
     return {
@@ -536,10 +579,20 @@ export async function generateMcQuestionsByAi(
     };
   }
 
-  if (!referenceMaterialId) {
+  const requiredCount = Math.max(0, requestedQuestionCount - validExistingItems.length);
+
+  if (requiredCount === 0) {
+    return {
+      generatedTitle: existingTitle,
+      generatedItems: validExistingItems,
+      error: undefined,
+    };
+  }
+
+  if (referenceMaterialIds.length === 0) {
     return {
       ...initialGeneratedMcQuestionState,
-      error: "Please choose a reference material first.",
+      error: "Please choose at least one reference material first.",
     };
   }
 
@@ -555,17 +608,17 @@ export async function generateMcQuestionsByAi(
     };
   }
 
-  const { data: material } = await supabase
+  const { data: materials } = await supabase
     .from("materials")
-    .select("title, description, file_url")
-    .eq("id", referenceMaterialId)
+    .select("id, title, description, file_url")
+    .in("id", referenceMaterialIds)
     .eq("teacher_id", user.id)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
-  if (!material) {
+  if (!materials || materials.length === 0) {
     return {
       ...initialGeneratedMcQuestionState,
-      error: "Selected material was not found.",
+      error: "Selected reference materials were not found.",
     };
   }
 
@@ -580,13 +633,19 @@ export async function generateMcQuestionsByAi(
     };
   }
 
-  const materialText = material.file_url ? await readMaterialFileText(material.file_url) : null;
+  const promptChunks = await Promise.all(
+    materials.map(async (material, index) => {
+      const materialText = material.file_url ? await readMaterialFileText(material.file_url) : null;
 
-  const promptContext = [
-    `Material title: ${material.title}`,
-    `Material description: ${material.description?.trim() || "No description provided."}`,
-    `Material excerpt: ${materialText || "No readable file text available."}`,
-  ].join("\n\n");
+      return [
+        `Material ${index + 1} title: ${material.title}`,
+        `Material ${index + 1} description: ${material.description?.trim() || "No description provided."}`,
+        `Material ${index + 1} excerpt: ${materialText || "No readable file text available."}`,
+      ].join("\n");
+    }),
+  );
+
+  const promptContext = promptChunks.join("\n\n");
 
   const aiResult = await requestAiText({
     endpoint,
@@ -596,7 +655,7 @@ export async function generateMcQuestionsByAi(
       "You are an education assistant. Generate clear multiple-choice questions grounded in provided learning material.",
     userPrompt:
       `${promptContext}\n\n` +
-      `Generate exactly ${requestedQuestionCount} multiple-choice questions related to the material. ` +
+      `Generate exactly ${requiredCount} multiple-choice questions that combine and connect ideas across the provided materials. ` +
       "Return only valid minified JSON with this exact shape: " +
       '{"title":"string","questions":[{"question":"string","optionA":"string","optionB":"string","optionC":"string","optionD":"string","correctOption":"A|B|C|D","explanation":"string"}]}. ' +
       "The questions array length must equal the requested count.",
@@ -610,7 +669,7 @@ export async function generateMcQuestionsByAi(
   }
 
   const parsed = parseGeneratedMcQuestions(aiResult.content);
-  if (!parsed || parsed.generatedItems.length !== requestedQuestionCount) {
+  if (!parsed || parsed.generatedItems.length !== requiredCount) {
     return {
       ...initialGeneratedMcQuestionState,
       error: "AI response format or question count was invalid. Please try again.",
@@ -618,7 +677,8 @@ export async function generateMcQuestionsByAi(
   }
 
   return {
-    ...parsed,
+    generatedTitle: existingTitle || parsed.generatedTitle,
+    generatedItems: [...validExistingItems, ...parsed.generatedItems],
     error: undefined,
   };
 }
@@ -713,6 +773,53 @@ export async function createAssessment(formData: FormData) {
     answer: answer || null,
     reference_material_id: validatedReferenceMaterialId,
   });
+
+  revalidatePath("/teacher");
+  revalidatePath("/student");
+  redirect("/teacher");
+}
+
+export async function updateAssessment(formData: FormData) {
+  const assessmentId = String(formData.get("assessmentId") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const prompt = String(formData.get("prompt") ?? "").trim();
+  const answer = String(formData.get("answer") ?? "").trim();
+  const referenceMaterialId = String(formData.get("referenceMaterialId") ?? "").trim();
+
+  if (!assessmentId || !title || !prompt) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  let validatedReferenceMaterialId: string | null = null;
+
+  if (referenceMaterialId) {
+    const { data: material } = await supabase
+      .from("materials")
+      .select("id")
+      .eq("id", referenceMaterialId)
+      .eq("teacher_id", user.id)
+      .maybeSingle();
+
+    if (material) {
+      validatedReferenceMaterialId = material.id;
+    }
+  }
+
+  await supabase
+    .from("assessments")
+    .update({
+      title,
+      prompt,
+      answer: answer || null,
+      reference_material_id: validatedReferenceMaterialId,
+    })
+    .eq("id", assessmentId)
+    .eq("teacher_id", user.id);
 
   revalidatePath("/teacher");
   revalidatePath("/student");
@@ -816,6 +923,127 @@ export async function createMcQuestions(formData: FormData) {
   await supabase.from("mc_questions").insert(
     normalizedItems.map((item) => ({
       set_id: createdSet.id,
+      teacher_id: user.id,
+      title,
+      question: item.question,
+      option_a: item.optionA,
+      option_b: item.optionB,
+      option_c: item.optionC,
+      option_d: item.optionD,
+      correct_option: item.correctOption,
+      explanation: item.explanation || null,
+      reference_material_id: validatedReferenceMaterialId,
+    })),
+  );
+
+  revalidatePath("/teacher");
+  revalidatePath("/student");
+  redirect("/teacher");
+}
+
+export async function updateMcQuestions(formData: FormData) {
+  const setId = String(formData.get("setId") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const itemsJson = String(formData.get("itemsJson") ?? "").trim();
+  const referenceMaterialId = String(formData.get("referenceMaterialId") ?? "").trim();
+
+  if (!setId || !title || !itemsJson) return;
+
+  let parsedItems: unknown;
+  try {
+    parsedItems = JSON.parse(itemsJson);
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(parsedItems) || parsedItems.length === 0) return;
+
+  const normalizedItems = parsedItems
+    .map((item) => {
+      const row = item as Partial<McQuestionItem>;
+      const correctOption = normalizeMcOption(row.correctOption);
+
+      if (
+        !row.question?.trim() ||
+        !row.optionA?.trim() ||
+        !row.optionB?.trim() ||
+        !row.optionC?.trim() ||
+        !row.optionD?.trim() ||
+        !correctOption
+      ) {
+        return null;
+      }
+
+      return {
+        question: row.question.trim(),
+        optionA: row.optionA.trim(),
+        optionB: row.optionB.trim(),
+        optionC: row.optionC.trim(),
+        optionD: row.optionD.trim(),
+        correctOption,
+        explanation: row.explanation?.trim() || "",
+      };
+    })
+    .filter(
+      (item): item is {
+        question: string;
+        optionA: string;
+        optionB: string;
+        optionC: string;
+        optionD: string;
+        correctOption: "A" | "B" | "C" | "D";
+        explanation: string;
+      } => Boolean(item),
+    );
+
+  if (normalizedItems.length === 0) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  // Verify the MC Set belongs to the user
+  const { data: existingSet } = await supabase
+    .from("mc_sets")
+    .select("id")
+    .eq("id", setId)
+    .eq("teacher_id", user.id)
+    .maybeSingle();
+
+  if (!existingSet) return;
+
+  let validatedReferenceMaterialId: string | null = null;
+
+  if (referenceMaterialId) {
+    const { data: material } = await supabase
+      .from("materials")
+      .select("id")
+      .eq("id", referenceMaterialId)
+      .eq("teacher_id", user.id)
+      .maybeSingle();
+
+    if (material) {
+      validatedReferenceMaterialId = material.id;
+    }
+  }
+
+  await supabase
+    .from("mc_sets")
+    .update({
+      title,
+      reference_material_id: validatedReferenceMaterialId,
+    })
+    .eq("id", setId);
+
+  // Delete old questions to replace them entirely
+  await supabase.from("mc_questions").delete().eq("set_id", setId);
+
+  await supabase.from("mc_questions").insert(
+    normalizedItems.map((item) => ({
+      set_id: setId,
       teacher_id: user.id,
       title,
       question: item.question,

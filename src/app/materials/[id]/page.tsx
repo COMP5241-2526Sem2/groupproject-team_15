@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { buildMaterialSummary } from "@/lib/ai/material-summary";
 import { createClient } from "@/lib/supabase/server";
+import { SummarizeButton } from "./summarize-button";
 
 function getFileExtension(url: string) {
   try {
@@ -114,12 +115,12 @@ export default async function MaterialViewerPage({
         {!summary ? (
           <div className="space-y-3 text-sm">
             <p>Click the button to generate an AI summary for this material.</p>
-            <form action={`/materials/${material.id}`} method="get">
-              <input type="hidden" name="summarize" value="1" />
-              <button type="submit" className="btn-primary">
-                Summarize Material
-              </button>
-            </form>
+            <SummarizeButton
+              materialId={material.id}
+              className="btn-primary"
+              idleLabel="Summarize Material"
+              loadingLabel="Generating Summary..."
+            />
           </div>
         ) : (
           <>
@@ -141,12 +142,12 @@ export default async function MaterialViewerPage({
               </div>
             ) : null}
 
-            <form action={`/materials/${material.id}`} method="get">
-              <input type="hidden" name="summarize" value="1" />
-              <button type="submit" className="btn-secondary">
-                Regenerate Summary
-              </button>
-            </form>
+            <SummarizeButton
+              materialId={material.id}
+              className="btn-secondary"
+              idleLabel="Regenerate Summary"
+              loadingLabel="Regenerating..."
+            />
           </>
         )}
       </section>

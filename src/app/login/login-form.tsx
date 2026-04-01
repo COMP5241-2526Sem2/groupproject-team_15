@@ -118,16 +118,7 @@ export default function LoginForm() {
         />
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-semibold">Full Name</label>
-        <input
-          className="field"
-          type="text"
-          value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
-          placeholder="Optional for first login"
-        />
-      </div>
+  
 
       <fieldset>
         <legend className="mb-2 text-sm font-semibold">Login as</legend>

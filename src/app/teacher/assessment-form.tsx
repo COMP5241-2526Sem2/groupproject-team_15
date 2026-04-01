@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import {
   createAssessment,
+  updateAssessment,
   generateAssessmentByAi,
   type GenerateAssessmentState,
 } from "@/app/actions";
@@ -14,6 +15,11 @@ type MaterialOption = {
 
 type Props = {
   materials: MaterialOption[];
+  assessmentId?: string;
+  initialTitle?: string;
+  initialQuestions?: string[];
+  initialAnswers?: string[];
+  initialReferenceMaterialIds?: string[];
 };
 
 const initialState: GenerateAssessmentState = {
@@ -36,44 +42,83 @@ function splitStructuredLines(text: string) {
     .filter(Boolean);
 }
 
-export default function AssessmentForm({ materials }: Props) {
-  const [title, setTitle] = useState("");
-  const [questions, setQuestions] = useState<string[]>([""]);
-  const [answers, setAnswers] = useState<string[]>([""]);
-  const [referenceMaterialId, setReferenceMaterialId] = useState("");
+export default function AssessmentForm({
+  materials,
+  assessmentId,
+  initialTitle = "",
+  initialQuestions = [""],
+  initialAnswers = [""],
+  initialReferenceMaterialIds = [],
+}: Props) {
+  const [title, setTitle] = useState(initialTitle);
+  const [questions, setQuestions] = useState<string[]>(initialQuestions);
+  const [answers, setAnswers] = useState<string[]>(initialAnswers);
+  const [selectedReferenceMaterialIds, setSelectedReferenceMaterialIds] = useState<string[]>(initialReferenceMaterialIds);
   const [questionCount, setQuestionCount] = useState("");
 
   const [state, generateAction, isGenerating] = useActionState(generateAssessmentByAi, initialState);
+  const [lastProcessedState, setLastProcessedState] = useState(initialState);
 
   useEffect(() => {
-    if (state.generatedTitle) {
+    if (state === lastProcessedState) return;
+    setLastProcessedState(state);
+
+    if (state.generatedTitle && !title) {
       setTitle(state.generatedTitle);
     }
 
+    let newQuestions: string[] = [];
     if (state.generatedQuestions.length > 0) {
-      setQuestions(state.generatedQuestions);
+      newQuestions = state.generatedQuestions;
     } else if (state.generatedPrompt) {
       const parsedQuestions = splitStructuredLines(state.generatedPrompt);
       if (parsedQuestions.length > 0) {
-        setQuestions(parsedQuestions);
+        newQuestions = parsedQuestions;
       }
     }
 
+    let newAnswers: string[] = [];
     if (state.generatedAnswers.length > 0) {
-      setAnswers(state.generatedAnswers);
+      newAnswers = state.generatedAnswers;
     } else if (state.generatedAnswer) {
       const parsedAnswers = splitStructuredLines(state.generatedAnswer);
       if (parsedAnswers.length > 0) {
-        setAnswers(parsedAnswers);
+        newAnswers = parsedAnswers;
       }
     }
-  }, [
-    state.generatedAnswer,
-    state.generatedAnswers,
-    state.generatedPrompt,
-    state.generatedQuestions,
-    state.generatedTitle,
-  ]);
+
+    if (newQuestions.length > 0 || newAnswers.length > 0) {
+      const updatedQs = [...questions];
+      const updatedAs = [...answers];
+
+      let aiIndex = 0;
+      for (let i = 0; i < Math.max(updatedQs.length, updatedAs.length); i++) {
+        // Only fill where the existing question is empty
+        const qIsEmpty = !updatedQs[i]?.trim();
+        if (qIsEmpty && aiIndex < Math.max(newQuestions.length, newAnswers.length)) {
+          updatedQs[i] = newQuestions[aiIndex] || "";
+          updatedAs[i] = newAnswers[aiIndex] || "";
+          aiIndex++;
+        }
+      }
+
+      // Append any remaining generated items
+      while (aiIndex < Math.max(newQuestions.length, newAnswers.length)) {
+        updatedQs.push(newQuestions[aiIndex] || "");
+        updatedAs.push(newAnswers[aiIndex] || "");
+        aiIndex++;
+      }
+
+      setQuestions(updatedQs);
+      setAnswers(updatedAs);
+    }
+  }, [state, lastProcessedState, title, questions, answers]);
+
+  const toggleMaterial = (id: string, checked: boolean) => {
+    setSelectedReferenceMaterialIds((current) =>
+      checked ? [...current, id] : current.filter((item) => item !== id),
+    );
+  };
 
   const serializedPrompt = questions
     .map((question, index) => question.trim() && `Q${index + 1}. ${question.trim()}`)
@@ -102,7 +147,8 @@ export default function AssessmentForm({ materials }: Props) {
   };
 
   return (
-    <form action={createAssessment} className="mt-4 space-y-3">
+    <form action={assessmentId ? updateAssessment : createAssessment} className="mt-4 space-y-3">
+      {assessmentId && <input type="hidden" name="assessmentId" value={assessmentId} />}
       <input
         name="title"
         className="field"
@@ -188,19 +234,28 @@ export default function AssessmentForm({ materials }: Props) {
         </div>
       </section>
 
-      <select
-        name="referenceMaterialId"
-        className="field"
-        value={referenceMaterialId}
-        onChange={(event) => setReferenceMaterialId(event.target.value)}
-      >
-        <option value="">No reference material</option>
+      <input type="hidden" name="referenceMaterialId" value={selectedReferenceMaterialIds[0] ?? ""} />
+
+      <fieldset className="field h-34 overflow-y-auto p-3 space-y-2 bg-[var(--bg)] border border-[var(--stroke)] rounded-lg">
+        <legend className="sr-only">Reference Materials</legend>
         {materials.map((material) => (
-          <option key={material.id} value={material.id}>
-            {material.title}
-          </option>
+          <label key={material.id} className="flex flex-row items-start gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              name="referenceMaterialIds"
+              value={material.id}
+              checked={selectedReferenceMaterialIds.includes(material.id)}
+              onChange={(e) => toggleMaterial(material.id, e.target.checked)}
+              className="mt-0.5 size-4 rounded-sm border-gray-300"
+            />
+            <span className="flex-1 opacity-90">{material.title}</span>
+          </label>
         ))}
-      </select>
+        {materials.length === 0 && <p className="text-xs opacity-70">No materials available.</p>}
+      </fieldset>
+      <p className="text-xs opacity-70">
+        Check the boxes for the materials you want to use.
+      </p>
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-44">
@@ -214,7 +269,6 @@ export default function AssessmentForm({ materials }: Props) {
             min={1}
             max={20}
             step={1}
-            required
             className="field"
             placeholder="e.g. 5"
             value={questionCount}
@@ -227,13 +281,24 @@ export default function AssessmentForm({ materials }: Props) {
           type="submit"
           formAction={generateAction}
           formNoValidate
-          disabled={isGenerating || !questionCount.trim()}
-          title={!questionCount.trim() ? "Enter question count first" : undefined}
+          disabled={isGenerating}
+          onClick={(e) => {
+            if (!questionCount.trim()) {
+              e.preventDefault();
+              alert("Please enter AI Question Count.");
+              return;
+            }
+            if (selectedReferenceMaterialIds.length === 0) {
+              e.preventDefault();
+              alert("Please select at least one reference material.");
+              return;
+            }
+          }}
         >
           {isGenerating ? "Generating..." : "Generate by AI"}
         </button>
         <button className="btn-primary" type="submit">
-          Publish Assessment
+          {assessmentId ? "Save Changes" : "Publish Assessment"}
         </button>
       </div>
 

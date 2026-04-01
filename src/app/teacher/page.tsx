@@ -70,6 +70,12 @@ export default async function TeacherPage() {
     .eq("teacher_id", user.id)
     .order("created_at", { ascending: false });
 
+  const { data: students } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .eq("role", "student")
+    .order("full_name", { ascending: true });
+
   const materialTitleById = new Map((materials ?? []).map((material) => [material.id, material.title]));
   const mcQuestionCountBySetId = new Map<string, number>();
   const firstMcQuestionBySetId = new Map<string, string>();
@@ -174,7 +180,9 @@ export default async function TeacherPage() {
             {(assessments ?? []).map((assessment) => (
               <li key={assessment.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-semibold">{assessment.title}</p>
+                  <Link href={`/teacher/assessments/${assessment.id}`} className="font-semibold underline hover:text-[var(--focus)]">
+                    {assessment.title}
+                  </Link>
                   <DeleteIconButton
                     action={deleteAssessment}
                     fieldName="assessmentId"
@@ -198,19 +206,6 @@ export default async function TeacherPage() {
                   )}
                 </div>
 
-                <div className="mt-3 space-y-1 text-xs opacity-75">
-                  <p className="font-semibold uppercase">Model answers</p>
-                  {splitAssessmentLines(assessment.answer).length ? (
-                    <ol className="list-decimal space-y-1 pl-5">
-                      {splitAssessmentLines(assessment.answer).map((answerLine, index) => (
-                        <li key={`${assessment.id}-a-${index}`}>{answerLine}</li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p>Not set</p>
-                  )}
-                </div>
-
                 <p className="text-xs opacity-75">
                   Reference material: {assessment.reference_material_id ? materialTitleById.get(assessment.reference_material_id) || "Not found" : "Not set"}
                 </p>
@@ -220,7 +215,33 @@ export default async function TeacherPage() {
           </ul>
         </article>
 
-        <article className="glass-card p-6 lg:col-span-2">
+        <article className="glass-card p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-2xl font-semibold">Student Results</h2>
+          </div>
+
+          <p className="mt-3 text-sm opacity-80">
+            Select a student to view their submitted assessments and MC questions.
+          </p>
+
+          <div className="grid gap-3 mt-5 sm:grid-cols-2 lg:grid-cols-2">
+            {(students ?? []).map((student) => (
+              <Link
+                key={student.id}
+                href={`/teacher/students/${student.id}`}
+                className="flex items-center gap-3 p-3 rounded-lg border border-[var(--stroke)] hover:bg-[var(--stroke)] transition text-sm font-semibold"
+              >
+                <div className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 w-8 h-8 rounded-full flex items-center justify-center uppercase">
+                  {(student.full_name || "S").charAt(0)}
+                </div>
+                <span>{student.full_name || "Unknown Student"}</span>
+              </Link>
+            ))}
+            {!students?.length ? <p className="text-sm">No students found.</p> : null}
+          </div>
+        </article>
+
+        <article className="glass-card p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-2xl font-semibold">Multiple Choice Questions</h2>
             <Link className="btn-primary" href="/teacher/mc/new">
@@ -236,7 +257,9 @@ export default async function TeacherPage() {
             {(mcSets ?? []).map((set) => (
               <li key={set.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-semibold">{set.title}</p>
+                  <Link href={`/teacher/mc/${set.id}`} className="font-semibold underline hover:text-[var(--focus)]">
+                    {set.title}
+                  </Link>
                   <DeleteIconButton
                     action={deleteMcSet}
                     fieldName="mcSetId"
@@ -250,9 +273,6 @@ export default async function TeacherPage() {
                 <p className="mt-2 text-xs opacity-75">
                   Total questions: {mcQuestionCountBySetId.get(set.id) ?? 0}
                 </p>
-                <p className="text-sm opacity-85">
-                  Preview: {firstMcQuestionBySetId.get(set.id) || "No question text available."}
-                </p>
                 <p className="text-xs opacity-75">
                   Reference material: {set.reference_material_id ? materialTitleById.get(set.reference_material_id) || "Not found" : "Not set"}
                 </p>
@@ -261,6 +281,8 @@ export default async function TeacherPage() {
             {!mcSets?.length ? <li>No MC sets yet.</li> : null}
           </ul>
         </article>
+
+       
       </section>
     </main>
   );

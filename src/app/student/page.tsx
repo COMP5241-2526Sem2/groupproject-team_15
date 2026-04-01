@@ -225,12 +225,16 @@ export default async function StudentPage() {
               const percentage = stats.total ? Math.round((stats.correct / stats.total) * 100) : 0;
 
               return (
-                <div key={submission.id} className="rounded-lg border border-[var(--stroke)] p-3">
+                <Link
+                  key={submission.id}
+                  href={`/student/mc/${submission.set_id}/results`}
+                  className="block rounded-lg border border-[var(--stroke)] p-3 transition hover:opacity-90"
+                >
                   <p className="font-semibold">{setItem?.title ?? "MC Set"}</p>
                   <p className="text-sm opacity-80">
                     Result: {stats.correct}/{stats.total} ({percentage}%)
                   </p>
-                </div>
+                </Link>
               );
             })}
             {!submittedMcSets.length ? <p>No submitted MC sets yet.</p> : null}
