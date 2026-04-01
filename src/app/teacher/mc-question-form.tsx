@@ -181,7 +181,7 @@ export default function McQuestionForm({
       <input type="hidden" name="referenceMaterialId" value={primaryReferenceMaterialId} />
 
       <fieldset className="field h-34 overflow-y-auto p-3 space-y-2 bg-[var(--bg)] border border-[var(--stroke)] rounded-lg">
-        <legend className="sr-only">Reference Materials</legend>
+        <h3 className="text-sm font-semibold">Reference Materials</h3>
         {materials.map((material) => (
           <label key={material.id} className="flex flex-row items-start gap-2 text-sm cursor-pointer select-none">
             <input
@@ -198,7 +198,7 @@ export default function McQuestionForm({
         {materials.length === 0 && <p className="text-xs opacity-70">No materials available.</p>}
       </fieldset>
       <p className="text-xs opacity-70">
-        Check the boxes for the materials you want to use.
+         Check the boxes for the materials you make reference or want AI to create questions according to the materials.
       </p>
 
       <div className="flex flex-wrap items-end gap-3">
