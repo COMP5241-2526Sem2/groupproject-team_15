@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import {
   createMcQuestions,
+  updateMcQuestions,
   generateMcQuestionsByAi,
   type GenerateMcQuestionState,
   type McQuestionItem,
@@ -15,6 +16,10 @@ type MaterialOption = {
 
 type Props = {
   materials: MaterialOption[];
+  setId?: string;
+  initialTitle?: string;
+  initialItems?: McQuestionItem[];
+  initialReferenceMaterialIds?: string[];
 };
 
 const initialState: GenerateMcQuestionState = {
@@ -34,10 +39,16 @@ function newEmptyItem(): McQuestionItem {
   };
 }
 
-export default function McQuestionForm({ materials }: Props) {
-  const [title, setTitle] = useState("");
-  const [items, setItems] = useState<McQuestionItem[]>([newEmptyItem()]);
-  const [referenceMaterialId, setReferenceMaterialId] = useState("");
+export default function McQuestionForm({
+  materials,
+  setId,
+  initialTitle = "",
+  initialItems = [newEmptyItem()],
+  initialReferenceMaterialIds = [],
+}: Props) {
+  const [title, setTitle] = useState(initialTitle);
+  const [items, setItems] = useState<McQuestionItem[]>(initialItems);
+  const [selectedReferenceMaterialIds, setSelectedReferenceMaterialIds] = useState<string[]>(initialReferenceMaterialIds);
   const [questionCount, setQuestionCount] = useState("");
 
   const [state, generateAction, isGenerating] = useActionState(generateMcQuestionsByAi, initialState);
@@ -66,10 +77,18 @@ export default function McQuestionForm({ materials }: Props) {
     setItems((current) => (current.length > 1 ? current.filter((_, i) => i !== index) : current));
   };
 
+  const toggleMaterial = (id: string, checked: boolean) => {
+    setSelectedReferenceMaterialIds((current) =>
+      checked ? [...current, id] : current.filter((item) => item !== id),
+    );
+  };
+
   const serializedItems = JSON.stringify(items);
+  const primaryReferenceMaterialId = selectedReferenceMaterialIds[0] ?? "";
 
   return (
-    <form action={createMcQuestions} className="mt-4 space-y-3">
+    <form action={setId ? updateMcQuestions : createMcQuestions} className="mt-4 space-y-3">
+      {setId && <input type="hidden" name="setId" value={setId} />}
       <input
         name="title"
         className="field"
@@ -159,24 +178,33 @@ export default function McQuestionForm({ materials }: Props) {
         </div>
       </section>
 
-      <select
-        name="referenceMaterialId"
-        className="field"
-        value={referenceMaterialId}
-        onChange={(event) => setReferenceMaterialId(event.target.value)}
-      >
-        <option value="">No reference material</option>
+      <input type="hidden" name="referenceMaterialId" value={primaryReferenceMaterialId} />
+
+      <fieldset className="field h-34 overflow-y-auto p-3 space-y-2 bg-[var(--bg)] border border-[var(--stroke)] rounded-lg">
+        <legend className="sr-only">Reference Materials</legend>
         {materials.map((material) => (
-          <option key={material.id} value={material.id}>
-            {material.title}
-          </option>
+          <label key={material.id} className="flex flex-row items-start gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              name="referenceMaterialIds"
+              value={material.id}
+              checked={selectedReferenceMaterialIds.includes(material.id)}
+              onChange={(e) => toggleMaterial(material.id, e.target.checked)}
+              className="mt-0.5 size-4 rounded-sm border-gray-300"
+            />
+            <span className="flex-1 opacity-90">{material.title}</span>
+          </label>
         ))}
-      </select>
+        {materials.length === 0 && <p className="text-xs opacity-70">No materials available.</p>}
+      </fieldset>
+      <p className="text-xs opacity-70">
+        Check the boxes for the materials you want to use.
+      </p>
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-44">
           <label htmlFor="mcQuestionCount" className="mb-1 block text-xs font-semibold opacity-75">
-            AI Question Count
+            Number of question
           </label>
           <input
             id="mcQuestionCount"
@@ -185,7 +213,6 @@ export default function McQuestionForm({ materials }: Props) {
             min={1}
             max={20}
             step={1}
-            required
             className="field"
             placeholder="e.g. 5"
             value={questionCount}
@@ -198,14 +225,25 @@ export default function McQuestionForm({ materials }: Props) {
           type="submit"
           formAction={generateAction}
           formNoValidate
-          disabled={isGenerating || !questionCount.trim()}
-          title={!questionCount.trim() ? "Enter question count first" : undefined}
+          disabled={isGenerating}
+          onClick={(e) => {
+            if (!questionCount.trim()) {
+              e.preventDefault();
+              alert("Please enter number of question.");
+              return;
+            }
+            if (selectedReferenceMaterialIds.length === 0) {
+              e.preventDefault();
+              alert("Please select at least one reference material.");
+              return;
+            }
+          }}
         >
           {isGenerating ? "Generating..." : "Generate MC by AI"}
         </button>
 
         <button className="btn-primary" type="submit">
-          Publish MC Questions
+          {setId ? "Save Changes" : "Publish MC Questions"}
         </button>
       </div>
 

@@ -177,6 +177,21 @@ create policy "users can view own profile"
 on public.profiles for select
 using (auth.uid() = id);
 
+create or replace function public.is_teacher_role(user_id uuid)
+returns boolean as $$
+  select exists(
+    select 1 from public.profiles
+    where id = user_id and role = 'teacher'
+  );
+$$ language sql security definer;
+
+create policy "teachers can view student profiles"
+on public.profiles for select
+using (
+  public.is_teacher_role(auth.uid())
+  and role = 'student'
+);
+
 create policy "users can update own profile"
 on public.profiles for update
 using (auth.uid() = id)
