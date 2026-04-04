@@ -1163,10 +1163,58 @@ export async function submitanswer(formData: FormData) {
 
   if (!user) return;
 
+  const { data: assessment } = await supabase
+    .from("assessments")
+    .select("prompt, answer")
+    .eq("id", assessmentId)
+    .maybeSingle();
+
+  let mark: string | null = null;
+
+  if (assessment?.answer) {
+    const hasMarkingScheme = assessment.answer.toLowerCase().includes("marking scheme");
+    const githubToken = process.env.GITHUB_TOKEN;
+    const endpoint = process.env.GITHUB_MODEL_ENDPOINT || "https://models.inference.ai.azure.com";
+    const modelName = process.env.GITHUB_MODEL_NAME || "gpt-4o-mini";
+
+    if (githubToken) {
+      const systemPrompt = hasMarkingScheme
+        ? "You are an objective teacher grading a student's answer based on a provided marking scheme in the model answer. Output ONLY the calculated final mark (e.g., '3/5', '8/10' or the number). Provide NO extra text, comments, or explanations."
+        : "You are an objective teacher providing brief formatting and content feedback on a student's answer based on the model answer. Keep it concise, to the point, within 2-3 short sentences. Do not provide a numeric mark.";
+        
+      const userPrompt = hasMarkingScheme
+        ? [
+            `Assessment Prompt: ${assessment.prompt}`,
+            `Model Answer & Marking Scheme: ${assessment.answer}`,
+            `Student Answer: ${answer}`,
+            `Evaluate the student answer using the marking scheme and return ONLY the mark.`,
+          ].join("\n\n")
+        : [
+            `Assessment Prompt: ${assessment.prompt}`,
+            `Model Answer: ${assessment.answer}`,
+            `Student Answer: ${answer}`,
+            `Provide brief, constructive feedback on the student's answer compared to the model answer.`,
+          ].join("\n\n");
+
+      const aiResult = await requestAiText({
+        endpoint,
+        githubToken,
+        modelName,
+        systemPrompt,
+        userPrompt,
+      });
+
+      if (aiResult.content) {
+        mark = aiResult.content.trim();
+      }
+    }
+  }
+
   await supabase.from("submissions").insert({
     assessment_id: assessmentId,
     student_id: user.id,
     answer,
+    mark,
   });
 
   revalidatePath("/student");

@@ -58,7 +58,7 @@ export default async function TeacherStudentDetailPage({
 
   const { data: submissions } = await supabase
     .from("submissions")
-    .select("id, assessment_id, answer, created_at")
+    .select("id, assessment_id, answer, mark, created_at")
     .eq("student_id", studentId)
     .order("created_at", { ascending: false });
 
@@ -152,6 +152,12 @@ export default async function TeacherStudentDetailPage({
                     <p className="text-sm whitespace-pre-wrap w-full break-words">
                       {submission.answer}
                     </p>
+                    {submission.mark ? (
+                      <div className="mt-3 border-t border-[var(--stroke)] pt-2">
+                        <p className="text-xs uppercase font-semibold text-blue-600 dark:text-blue-400 mb-1">AI Feedback / Mark</p>
+                        <p className="text-sm font-medium">{submission.mark}</p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               );

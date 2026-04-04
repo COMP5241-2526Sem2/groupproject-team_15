@@ -51,7 +51,7 @@ export default async function StudentPage() {
 
   const { data: submissions } = await supabase
     .from("submissions")
-    .select("id, assessment_id, created_at")
+    .select("id, assessment_id, mark, created_at")
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -66,7 +66,7 @@ export default async function StudentPage() {
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
 
-  const latestSubmissionByAssessment = new Map<string, { id: string; assessment_id: string; created_at: string }>();
+  const latestSubmissionByAssessment = new Map<string, { id: string; assessment_id: string; mark: string | null; created_at: string }>();
   for (const submission of submissions ?? []) {
     if (!latestSubmissionByAssessment.has(submission.assessment_id)) {
       latestSubmissionByAssessment.set(submission.assessment_id, submission);
@@ -125,7 +125,7 @@ export default async function StudentPage() {
       <section className="grid gap-5 lg:grid-cols-2">
         <article className="glass-card p-6">
           <h2 className="text-2xl font-semibold">Learning Materials</h2>
-          <ul className="mt-4 space-y-2 text-sm">
+          <ul className="mt-4 space-y-2 text-sm max-h-96 overflow-y-auto pr-2">
             {(materials ?? []).map((material) => (
               <li key={material.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <p className="font-semibold">{material.title}</p>
@@ -146,7 +146,7 @@ export default async function StudentPage() {
         <article className="glass-card p-6">
           <h2 className="text-2xl font-semibold">Available Assessments</h2>
           <p className="mt-2 text-sm">Click an assessment to open the answer page.</p>
-          <div className="mt-5 space-y-2 text-sm">
+          <div className="mt-5 space-y-2 text-sm max-h-96 overflow-y-auto pr-2">
             {availableAssessments.map((assessment) => (
               <Link
                 key={assessment.id}
@@ -172,7 +172,7 @@ export default async function StudentPage() {
         <article className="glass-card p-6">
           <h2 className="text-2xl font-semibold">Submitted Assignments</h2>
           <p className="mt-2 text-sm">Assessments you have already submitted.</p>
-          <div className="mt-5 space-y-2 text-sm">
+          <div className="mt-5 space-y-2 text-sm max-h-96 overflow-y-auto pr-2">
             {submittedAssessments.map((submission) => {
               const assessment = assessmentsById.get(submission.assessment_id);
 
@@ -191,6 +191,12 @@ export default async function StudentPage() {
                   ) : (
                     <p>{assessment?.prompt ?? "Submitted successfully."}</p>
                   )}
+                  {submission.mark ? (
+                    <div className="mt-3 border-t border-[var(--stroke)] pt-2">
+                      <p className="text-xs uppercase font-semibold text-blue-600 dark:text-blue-400 mb-1">AI Feedback / Mark</p>
+                      <p className="text-sm font-medium">{submission.mark}</p>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -201,7 +207,7 @@ export default async function StudentPage() {
         <article className="glass-card p-6">
           <h2 className="text-2xl font-semibold">Available MC Sets</h2>
           <p className="mt-2 text-sm">Open a set, answer all MC questions, and submit.</p>
-          <div className="mt-5 space-y-2 text-sm">
+          <div className="mt-5 space-y-2 text-sm max-h-96 overflow-y-auto pr-2">
             {availableMcSets.map((setItem) => (
               <Link
                 key={setItem.id}
@@ -218,7 +224,7 @@ export default async function StudentPage() {
         <article className="glass-card p-6">
           <h2 className="text-2xl font-semibold">Submitted MC Sets</h2>
           <p className="mt-2 text-sm">MC sets you have already completed.</p>
-          <div className="mt-5 space-y-2 text-sm">
+          <div className="mt-5 space-y-2 text-sm max-h-96 overflow-y-auto pr-2">
             {submittedMcSets.map((submission) => {
               const setItem = mcSetsById.get(submission.set_id);
               const stats = mcSubmissionStatsBySet.get(submission.set_id) ?? { total: 0, correct: 0 };

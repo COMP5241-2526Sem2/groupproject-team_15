@@ -172,6 +172,7 @@ export type Database = {
           student_id: string;
           answer: string;
           attempt_no: number;
+          mark: string | null;
           created_at: string;
         };
         Insert: {
@@ -180,11 +181,13 @@ export type Database = {
           student_id: string;
           answer: string;
           attempt_no?: number;
+          mark?: string | null;
           created_at?: string;
         };
         Update: {
           answer?: string;
           attempt_no?: number;
+          mark?: string | null;
           created_at?: string;
         };
         Relationships: [];
