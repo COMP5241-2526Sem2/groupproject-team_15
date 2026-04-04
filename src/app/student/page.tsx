@@ -177,9 +177,10 @@ export default async function StudentPage() {
               const assessment = assessmentsById.get(submission.assessment_id);
 
               return (
-                <div
+                <Link
+                  href={`/student/assessments/${submission.assessment_id}/results`}
                   key={submission.id}
-                  className="rounded-lg border border-[var(--stroke)] p-3"
+                  className="block rounded-lg border border-[var(--stroke)] p-3 transition hover:opacity-90"
                 >
                   <p className="font-semibold">{assessment?.title ?? "Assessment"}</p>
                   {splitAssessmentQuestions(assessment?.prompt).length ? (
@@ -189,7 +190,7 @@ export default async function StudentPage() {
                       ))}
                     </ol>
                   ) : (
-                    <p>{assessment?.prompt ?? "Submitted successfully."}</p>
+                    <p className="text-gray-600 dark:text-gray-400">{assessment?.prompt ?? "Submitted successfully."}</p>
                   )}
                   {submission.mark ? (
                     <div className="mt-3 border-t border-[var(--stroke)] pt-2">
@@ -197,7 +198,8 @@ export default async function StudentPage() {
                       <p className="text-sm font-medium">{submission.mark}</p>
                     </div>
                   ) : null}
-                </div>
+              
+                </Link>
               );
             })}
             {!submittedAssessments.length ? <p>No submitted assignments yet.</p> : null}

@@ -1185,7 +1185,7 @@ export async function submitanswer(formData: FormData) {
 
     if (githubToken) {
       const systemPrompt = hasMarkingScheme
-        ? "You are an objective teacher grading a student's answer based on a provided marking scheme in the model answer. Output ONLY the calculated final mark (e.g., '3/5', '8/10' or the number). Provide NO extra text, comments, or explanations."
+        ? "You are an objective teacher grading a student's answer based on a provided marking scheme in the model answer. Make sure to grade ALL questions separately. Output ONLY the marks for each question in a concise list (e.g., 'Q1: 3/5, Q2: 4/5'). Provide NO extra text, comments, or explanations."
         : "You are an objective teacher providing brief formatting and content feedback on a student's answer based on the model answer. Keep it concise, to the point, within 2-3 short sentences. Do not provide a numeric mark.";
         
       const userPrompt = hasMarkingScheme
@@ -1193,7 +1193,7 @@ export async function submitanswer(formData: FormData) {
             `Assessment Prompt: ${assessment.prompt}`,
             `Model Answer & Marking Scheme: ${assessment.answer}`,
             `Student Answer: ${answer}`,
-            `Evaluate the student answer using the marking scheme and return ONLY the mark.`,
+            `Evaluate the student's answer for ALL questions using the marking scheme and return ONLY the separated marks.`,
           ].join("\n\n")
         : [
             `Assessment Prompt: ${assessment.prompt}`,
