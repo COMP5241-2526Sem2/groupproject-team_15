@@ -10,6 +10,17 @@ type PageProps = {
 };
 
 function splitStructuredLines(text: string | null) {
+  if (!text) return [];
+
+  // Try to split on explicit Q1., A1., Question 1, Answer 1., etc. that we or the AI generate
+  const blockRegex = /(?:^|\n)\s*(?:question|answer|q|a)\s*\d+[\s).:-]+\s*/i;
+  if (blockRegex.test(text)) {
+    return text
+      .split(blockRegex)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
   return (text ?? "")
     .split(/\r?\n+/)
     .map((line) => line.trim())

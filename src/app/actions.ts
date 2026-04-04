@@ -164,8 +164,13 @@ function parseGeneratedAssessment(text: string): {
         )
         .filter(Boolean);
 
-    const splitStructuredLines = (value: string) =>
-      value
+    const splitStructuredLines = (value: string) => {
+      if (!value) return [];
+      const blockRegex = /(?:^|\n)\s*(?:question|answer|q|a)\s*\d+[\s).:-]+\s*/i;
+      if (blockRegex.test(value)) {
+        return value.split(blockRegex).map((part) => part.trim()).filter(Boolean);
+      }
+      return value
         .split(/\r?\n+/)
         .map((line) =>
           line
@@ -174,6 +179,7 @@ function parseGeneratedAssessment(text: string): {
             .trim(),
         )
         .filter(Boolean);
+    };
 
     const generatedTitle = parsed.title?.trim() || "";
     let generatedPrompt = parsed.prompt?.trim() || "";

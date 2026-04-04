@@ -31,6 +31,17 @@ const initialState: GenerateAssessmentState = {
 };
 
 function splitStructuredLines(text: string) {
+  if (!text) return [];
+
+  // Try to split on explicit Q1., A1., Question 1, Answer 1., etc. that we or the AI generate
+  const blockRegex = /(?:^|\n)\s*(?:question|answer|q|a)\s*\d+[\s).:-]+\s*/i;
+  if (blockRegex.test(text)) {
+    return text
+      .split(blockRegex)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
   return text
     .split(/\r?\n+/)
     .map((line) =>
@@ -209,6 +220,7 @@ export default function AssessmentForm({
             Add Answer Line
           </button>
         </div>
+<h3 className="text-sm font-semibold"> *Please include the word "marking scheme" and provide marking scheme in answer box if want to mark by AI </h3>
 
         <div className="space-y-2">
           {answers.map((answerLine, index) => (
