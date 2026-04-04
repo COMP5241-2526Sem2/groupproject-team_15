@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 const highlights = [
-  "Students submit full thinking process before hints",
-  "AI gives Socratic prompts and tiered guidance",
+  "Students can ask questions and get hint from AI chatbox",
+  "AI provides assignment score automatically",
   "Teachers track mastery, errors, and partial-credit progress",
   "Retrieval-ready architecture to ground answers in class content",
 ];
@@ -14,12 +14,12 @@ export default function Home() {
         <div className="space-y-5">
           <span className="chip">AI Learning Platform</span>
           <h1 className="text-4xl leading-tight font-semibold sm:text-5xl">
-            ThinkPath: make student reasoning visible, not just final answers.
+            ThinkPath: Learn together with AI.
           </h1>
           <p className="max-w-2xl text-lg">
             A role-based platform for teachers and students. Teachers publish
             materials and adaptive assessments, while students submit step-by-step
-            thinking and receive scaffolded AI coaching.
+            thinking and receive AI response.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <Link href="/login" className="btn-primary">
@@ -48,15 +48,13 @@ export default function Home() {
         <article className="glass-card fade-in p-6" style={{ animationDelay: "120ms" }}>
           <h3 className="text-2xl">Thinking Guide</h3>
           <p className="mt-2">
-            Students must provide text, step lists, or OCR-derived notes before
-            hints unlock. AI responds with Socratic checks, not direct answers.
+            Students can ask question in chatbox when they face difficulties. AI responds with Socratic checks, not direct answers.
           </p>
         </article>
         <article className="glass-card fade-in p-6" style={{ animationDelay: "220ms" }}>
           <h3 className="text-2xl">Teacher Dashboard</h3>
           <p className="mt-2">
-            Upload study resources, create adaptive assessments, and inspect common
-            error patterns with export-ready records.
+            Upload study resources, create adaptive assessments, MC question sets, view students results
           </p>
         </article>
         <article className="glass-card fade-in p-6" style={{ animationDelay: "320ms" }}>

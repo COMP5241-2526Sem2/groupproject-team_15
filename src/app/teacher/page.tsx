@@ -136,7 +136,7 @@ export default async function TeacherPage() {
             </button>
           </form>
 
-          <ul className="mt-5 space-y-2 text-sm">
+          <ul className="mt-5 space-y-2 text-sm max-h-96 overflow-y-auto pr-2">
             {(materials ?? []).map((material) => (
               <li key={material.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -176,7 +176,7 @@ export default async function TeacherPage() {
             Open the full-page editor to generate and publish assessments with more space.
           </p>
 
-          <ul className="mt-5 space-y-2 text-sm">
+          <ul className="mt-5 space-y-2 text-sm max-h-96 overflow-y-auto pr-2">
             {(assessments ?? []).map((assessment) => (
               <li key={assessment.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -224,7 +224,7 @@ export default async function TeacherPage() {
             Select a student to view their submitted assessments and MC questions.
           </p>
 
-          <div className="grid gap-3 mt-5 sm:grid-cols-2 lg:grid-cols-2">
+          <div className="grid gap-3 mt-5 sm:grid-cols-2 lg:grid-cols-2 max-h-96 overflow-y-auto pr-2">
             {(students ?? []).map((student) => (
               <Link
                 key={student.id}
@@ -253,7 +253,7 @@ export default async function TeacherPage() {
             Build MC questions manually or generate them by AI from your reference material.
           </p>
 
-          <ul className="mt-5 space-y-2 text-sm">
+          <ul className="mt-5 space-y-2 text-sm max-h-96 overflow-y-auto pr-2">
             {(mcSets ?? []).map((set) => (
               <li key={set.id} className="rounded-lg border border-[var(--stroke)] p-3">
                 <div className="flex items-start justify-between gap-3">

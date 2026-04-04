@@ -125,9 +125,10 @@ alter table public.submissions
 alter column answer set not null;
 
 alter table public.submissions
-drop column if exists thinking_process,
-drop column if exists ai_feedback,
-drop column if exists partial_score;
+drop column if exists thinking_process;
+
+alter table public.submissions
+add column if not exists mark text;
 
 drop table if exists public.interactions;
 
