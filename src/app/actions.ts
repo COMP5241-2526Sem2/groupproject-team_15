@@ -712,6 +712,10 @@ export async function createMaterial(formData: FormData) {
   let fileUrl: string | null = null;
 
   if (file instanceof File && file.size > 0) {
+    if (file.size > 10 * 1024 * 1024) {
+      throw new Error("File is too large. Maximum size is 10 MB.");
+    }
+
     const extension = file.name.includes(".") ? file.name.split(".").pop() : "";
     const baseName = file.name.replace(/\.[^/.]+$/, "").toLowerCase();
     const safeName = baseName.replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "file";
