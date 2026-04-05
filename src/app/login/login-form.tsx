@@ -9,7 +9,6 @@ export default function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<UserRole>("student");
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,13 +53,14 @@ export default function LoginForm() {
 
     try {
       const supabase = createClient();
+      const extractedFullName = email.split('@')[0];
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             role,
-            full_name: fullName,
+            full_name: extractedFullName,
           },
           emailRedirectTo: `${origin}/auth/callback?next=/dashboard`,
         },
